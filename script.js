@@ -15,10 +15,13 @@ const selected = new Set();
 const instructions = new Map();
 
 let currentGallery = null;
+let clientToken = "";
+let galleryType = "original";
 let storageKey = "";
 
 let availableGalleries = [];
 let photosRequestId = 0;
+const LOCAL_TEST_MODE = !!GALLERY_CONFIG.localTestMode;
 
 
 /* =========================
@@ -69,9 +72,8 @@ function downloadUrl(fileId) {
 function folderUrl() {
   if (!currentGallery) return "#";
 
-  return `https://drive.google.com/drive/folders/${encodeURIComponent(
-    currentGallery.folderId
-  )}`;
+  const id = galleryType === "edited" ? currentGallery.editedFolderId : currentGallery.folderId;
+  return id ? `https://drive.google.com/drive/folders/${encodeURIComponent(id)}` : "#";
 }
 
 
@@ -154,6 +156,11 @@ function saveSelection() {
     );
 
   } catch (_) {}
+  if(!LOCAL_TEST_MODE && clientToken && currentGallery){
+    const payload={selected:[...selected],instructions:Object.fromEntries(instructions)};
+    const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(payload)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    jsonpRequest({action:"saveSelection",galleryId:currentGallery.id,token:clientToken,payload:encoded}).then(r=>{if(!r.ok)console.warn(r.error);}).catch(err=>console.warn("No se pudo sincronizar la selección",err));
+  }
 
 }
 
@@ -293,66 +300,82 @@ function loadGalleryList() {
 ========================= */
 
 function renderGalleryList(galleries) {
-
   galleryList.innerHTML = "";
-
-  galleries.forEach(galleryData => {
-
-    const button =
-      document.createElement("button");
-
-    button.type = "button";
-    button.className = "gallery-choice";
-
-    button.dataset.galleryIndex =
-      String(availableGalleries.indexOf(galleryData));
-
-    button.innerHTML = `
-      <span class="gallery-choice-name">
-        ${escapeHtml(galleryData.clientName)}
-      </span>
-
-      <span class="gallery-choice-title">
-        ${escapeHtml(
-          galleryData.galleryTitle ||
-          `Galería de ${galleryData.clientName}`
-        )}
-      </span>
-
-      <span class="gallery-choice-arrow">
-        →
-      </span>
-    `;
-
-    galleryList.appendChild(button);
-
+  galleries.forEach((galleryData, index) => {
+    const group = document.createElement("article");
+    group.className = "client-gallery-card";
+    group.dataset.name = String(galleryData.clientName || "").toLocaleLowerCase("es");
+    group.dataset.original = "true";
+    group.dataset.edited = galleryData.hasEdited ? "true" : "false";
+    const safeName = escapeHtml(galleryData.clientName || "Cliente");
+    const originalSrc = galleryData.originalThumb ? imageUrl(galleryData.originalThumb, 520) : "";
+    const category = escapeHtml(galleryData.category || "GALERÍA PRIVADA");
+    group.innerHTML = `
+      <div class="client-card-photo">
+        ${originalSrc
+          ? `<img src="${originalSrc}" alt="Fotografía de ${safeName}" loading="lazy">`
+          : `<div class="photo-placeholder"><span>JA</span><small>JORGE ARREOLA</small></div>`}
+      </div>
+      <div class="client-card-content">
+        <div class="client-card-heading">
+          <div><h3>${safeName}</h3><p class="client-category">${category}</p></div>
+          <span class="availability ${galleryData.hasEdited ? "ready" : ""}"><i></i>${galleryData.hasEdited ? "Original y editada" : "Disponible"}</span>
+        </div>
+        <div class="client-card-actions">
+          <div class="client-access original-access">
+            <span class="access-icon" aria-hidden="true"><img src="icono-galeria.png" alt=""></span>
+            <strong>Galería original</strong>
+            <small>Fotografías de la sesión</small>
+            <button type="button" class="gallery-enter" data-gallery-index="${index}" data-gallery-type="original">Ingresar <span>→</span></button>
+          </div>
+          <div class="client-access edited-access ${galleryData.hasEdited ? "" : "is-unavailable"}">
+            <span class="access-icon" aria-hidden="true"><img src="icono-edicion.png" alt=""></span>
+            <strong>Galería editada</strong>
+            <small>${galleryData.hasEdited ? "Fotografías finales" : "Aún no disponible"}</small>
+            <button type="button" class="gallery-enter" data-gallery-index="${index}" data-gallery-type="edited" ${galleryData.hasEdited ? "" : "disabled"}>${galleryData.hasEdited ? "Ingresar" : "No disponible"} <span>${galleryData.hasEdited ? "→" : "⌑"}</span></button>
+          </div>
+        </div>
+      </div>`;
+    galleryList.appendChild(group);
   });
-
+  applyGalleryFilters();
 }
 
+function applyGalleryFilters() {
+  const query = (document.getElementById("gallerySearch")?.value || "").trim().toLocaleLowerCase("es");
+  const filter = document.querySelector("[data-gallery-filter].active")?.dataset.galleryFilter || "all";
+  galleryList.querySelectorAll(".client-gallery-card").forEach(card => {
+    const matchesName = !query || card.dataset.name.includes(query);
+    const matchesType = filter === "all" ||
+      (filter === "original" && card.dataset.original === "true") ||
+      (filter === "edited" && card.dataset.edited === "true");
+    card.hidden = !(matchesName && matchesType);
+  });
+}
+
+document.getElementById("gallerySearch")?.addEventListener("input", applyGalleryFilters);
+document.querySelectorAll("[data-gallery-filter]").forEach(button => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-gallery-filter]").forEach(b => b.classList.toggle("active", b === button));
+    applyGalleryFilters();
+  });
+});
 
 /*
  * Delegación de clics para las galerías.
  * Funciona aunque la lista se vuelva a renderizar.
  */
 galleryList.addEventListener("click", event => {
-
-  const button =
-    event.target.closest(".gallery-choice");
-
-  if (!button || !galleryList.contains(button)) {
-    return;
-  }
-
+  const button = event.target.closest(".gallery-enter");
+  if (!button || !galleryList.contains(button) || button.disabled) return;
   const index = Number(button.dataset.galleryIndex);
   const galleryData = availableGalleries[index];
-
-  if (!galleryData) {
-    return;
-  }
-
-  selectGallery(galleryData);
-
+  if (!galleryData) return;
+  // La lista pública solo sirve para localizar la galería; el acceso real
+  // siempre se valida con la contraseña en la pantalla de acceso individual.
+  const url = new URL(window.location.href);
+  url.searchParams.set("g", galleryData.id);
+  window.location.href = url.toString();
 });
 
 
@@ -430,8 +453,10 @@ backToGalleriesBtn.onclick = () => {
 
   gallery.innerHTML = "";
 
-  gallerySelector.style.display = "";
+  gallerySelector.style.display = "none";
   photoGallerySection.style.display = "none";
+  document.getElementById("clientLogin").classList.remove("hidden");
+  clientToken = "";
 
   clientNameTop.textContent =
     "Selecciona una galería";
@@ -1164,8 +1189,6 @@ function loadPhotosViaJsonp() {
         "Abre la carpeta de Drive para descargar toda la galería";
 
 
-      loadSavedSelection();
-
       render();
 
     };
@@ -1176,15 +1199,30 @@ function loadPhotosViaJsonp() {
     "text/javascript";
 
 
-  script.src =
-    `${GALLERY_CONFIG.appsScriptUrl}` +
-    `?folderId=${encodeURIComponent(
-      currentGallery.folderId
-    )}` +
-    `&callback=${encodeURIComponent(
-      callbackName
-    )}` +
-    `&_=${Date.now()}`;
+  if (LOCAL_TEST_MODE) {
+    // La implementación publicada actualmente usa el endpoint antiguo:
+    // recibe folderId y devuelve {files:[...]}. No requiere actualizar Apps Script.
+    const testFolderId = galleryType === "edited"
+      ? currentGallery.editedFolderId
+      : currentGallery.folderId;
+    if (!testFolderId) {
+      finishError("Esta galería todavía no tiene una carpeta configurada.");
+      return;
+    }
+    script.src =
+      `${GALLERY_CONFIG.appsScriptUrl}` +
+      `?folderId=${encodeURIComponent(testFolderId)}` +
+      `&callback=${encodeURIComponent(callbackName)}` +
+      `&_=${Date.now()}`;
+  } else {
+    script.src =
+      `${GALLERY_CONFIG.appsScriptUrl}` +
+      `?action=photos&galleryId=${encodeURIComponent(currentGallery.id)}` +
+      `&type=${encodeURIComponent(galleryType)}` +
+      `&token=${encodeURIComponent(clientToken)}` +
+      `&callback=${encodeURIComponent(callbackName)}` +
+      `&_=${Date.now()}`;
+  }
 
 
   script.onerror =
@@ -1479,6 +1517,14 @@ largePhoto.addEventListener(
 );
 
 
+
+// Gestos táctiles: swipe para cambiar de foto y pellizco para zoom.
+let touchStartX=0,touchStartY=0,touchStartDistance=0,touchStartZoom=1;
+function touchDistance(t){const dx=t[0].clientX-t[1].clientX,dy=t[0].clientY-t[1].clientY;return Math.hypot(dx,dy);}
+photoStage.addEventListener("touchstart",e=>{if(e.touches.length===2){touchStartDistance=touchDistance(e.touches);touchStartZoom=zoom;}else if(e.touches.length===1){touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;}},{passive:true});
+photoStage.addEventListener("touchmove",e=>{if(e.touches.length===2){e.preventDefault();zoom=Math.max(1,Math.min(4,touchStartZoom*(touchDistance(e.touches)/touchStartDistance)));if(zoom===1){offsetX=0;offsetY=0;}applyZoom();}},{passive:false});
+photoStage.addEventListener("touchend",e=>{if(zoom<=1.01&&e.changedTouches.length){const dx=e.changedTouches[0].clientX-touchStartX,dy=e.changedTouches[0].clientY-touchStartY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){document.getElementById(dx<0?"lightNext":"lightPrev").click();}}});
+
 /* =========================
    TECLADO
 ========================= */
@@ -1705,6 +1751,103 @@ document
   };
 
 
+
+/* =========================
+   ACCESO PRIVADO POR CLIENTE
+========================= */
+function jsonpRequest(params, timeoutMs=30000) {
+  return new Promise((resolve,reject)=>{
+    const cb=`__ja_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script=document.createElement("script"); let done=false;
+    const finish=(err,data)=>{if(done)return;done=true;clearTimeout(timer);try{delete window[cb]}catch(_){window[cb]=undefined}script.remove();err?reject(err):resolve(data)};
+    const timer=setTimeout(()=>finish(new Error("Tiempo de espera agotado.")),timeoutMs);
+    window[cb]=data=>finish(null,data);
+    const q=new URLSearchParams({...params,callback:cb,_:Date.now()});
+    script.src=`${GALLERY_CONFIG.appsScriptUrl}?${q.toString()}`;script.onerror=()=>finish(new Error("No se pudo conectar con el servidor."));document.head.appendChild(script);
+  });
+}
+function initializePrivateGallery(){
+  const id=new URLSearchParams(location.search).get("g");
+  photoGallerySection.style.display="none";
+  const login=document.getElementById("clientLogin");
+  if(!id){login.classList.add("hidden");gallerySelector.style.display="grid";loadGalleryList();return;}
+  gallerySelector.style.display="none";login.classList.remove("hidden");
+  window.__privateGalleryId=id;
+  document.getElementById("clientLoginForm").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const msg=document.getElementById("clientLoginMessage");
+    const entered=document.getElementById("clientPassword").value;
+    msg.textContent="Verificando contraseña…";
+    try{
+      if (LOCAL_TEST_MODE) {
+        if (entered !== GALLERY_CONFIG.testPassword) {
+          msg.textContent="Contraseña incorrecta.";
+          return;
+        }
+        const list=await jsonpRequest({action:"listGalleries"});
+        const rows=Array.isArray(list)?list:(list.galleries||[]);
+        let found=rows.find(g=>String(g.id)===String(id));
+        if (!found && rows.length===1) found=rows[0];
+        if (!found) {
+          msg.textContent="No se encontró esta galería en la lista actual del servidor.";
+          return;
+        }
+        const originalFolder=found.folderId || (String(id)==="vianey" ? GALLERY_CONFIG.folderId : "");
+        if (!originalFolder) {
+          msg.textContent="La galería existe, pero el servidor actual no devuelve su folderId. No se modificó nada.";
+          return;
+        }
+        currentGallery={
+          id:found.id || id,
+          clientName:found.clientName || GALLERY_CONFIG.clientName,
+          galleryTitle:found.galleryTitle || `Galería de ${found.clientName || GALLERY_CONFIG.clientName}`,
+          folderId:originalFolder,
+          editedFolderId:found.editedFolderId || "",
+          hasEdited:!!found.editedFolderId
+        };
+        clientToken="";
+        GALLERY_CONFIG.clientName=currentGallery.clientName;
+        GALLERY_CONFIG.galleryTitle=currentGallery.galleryTitle;
+        GALLERY_CONFIG.folderId=currentGallery.folderId;
+        storageKey=`jorge-arreola-gallery:${currentGallery.id}`;
+        selected.clear();instructions.clear();loadSavedSelection();
+        login.classList.add("hidden");
+        document.getElementById("clientGalleryChoices").classList.remove("hidden");
+        document.getElementById("choicesClientName").textContent=currentGallery.clientName;
+        document.getElementById("originalTitle").textContent=currentGallery.galleryTitle;
+        document.getElementById("originalThumb").src=found.originalThumb?imageUrl(found.originalThumb,600):"";
+        document.getElementById("editedThumb").src=found.editedThumb?imageUrl(found.editedThumb,600):"";
+        document.querySelectorAll("[data-open-type]").forEach(b=>b.onclick=()=>{
+          galleryType=b.dataset.openType;
+          if(galleryType==="edited"&&!currentGallery.editedFolderId){
+            alert("La galería editada todavía no está configurada.");
+            return;
+          }
+          document.getElementById("clientGalleryChoices").classList.add("hidden");
+          photoGallerySection.style.display="";
+          clientNameTop.textContent=currentGallery.clientName;
+          galleryTitle.textContent=galleryType==="edited"?"Galería editada":currentGallery.galleryTitle;
+          loadPhotosViaJsonp();
+          updateSelection();
+        });
+        updateSelection();
+        return;
+      }
+      const r=await jsonpRequest({action:"loginGallery",galleryId:id,password:entered});
+      if(!r.ok){msg.textContent=r.error||"No se pudo iniciar sesión.";return;}
+      clientToken=r.token;currentGallery=r.gallery;currentGallery.folderId=r.folderIds.original;currentGallery.editedFolderId=r.folderIds.edited;GALLERY_CONFIG.clientName=r.gallery.clientName;GALLERY_CONFIG.galleryTitle=r.gallery.galleryTitle;GALLERY_CONFIG.folderId=r.folderIds.original;storageKey=`jorge-arreola-gallery:${id}`;
+      selected.clear();instructions.clear();if(r.selection){(r.selection.selected||[]).forEach(n=>selected.add(n));Object.entries(r.selection.instructions||{}).forEach(([n,v])=>instructions.set(n,v));}
+      login.classList.add("hidden");document.getElementById("clientGalleryChoices").classList.remove("hidden");
+      document.getElementById("choicesClientName").textContent=currentGallery.clientName;
+      document.getElementById("originalTitle").textContent=currentGallery.galleryTitle;
+      document.getElementById("originalThumb").src=r.originalThumb?imageUrl(r.originalThumb,600):"";
+      document.getElementById("editedThumb").src=r.editedThumb?imageUrl(r.editedThumb,600):"";
+      document.querySelectorAll("[data-open-type]").forEach(b=>b.onclick=()=>{galleryType=b.dataset.openType;if(galleryType==="edited"&&!currentGallery.hasEdited){alert("La galería editada todavía no está disponible.");return;}document.getElementById("clientGalleryChoices").classList.add("hidden");photoGallerySection.style.display="";clientNameTop.textContent=currentGallery.clientName;galleryTitle.textContent=galleryType==="edited"?"Galería editada":currentGallery.galleryTitle;loadPhotosViaJsonp();updateSelection();});
+      updateSelection();
+    }catch(err){msg.textContent=err.message||"Error de conexión.";}
+  });
+}
+
 /* =========================
    INICIO
 ========================= */
@@ -1717,4 +1860,4 @@ gallerySelector.style.display =
   "";
 
 
-loadGalleryList();
+initializePrivateGallery();

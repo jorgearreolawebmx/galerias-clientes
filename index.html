@@ -13,39 +13,26 @@
 <body>
 
 <header class="topbar">
-
-  <div>
-    <div class="brand">
-      JORGE ARREOLA <span>FOTOGRAFÍA</span>
-    </div>
-
-    <div class="subtitle">
-      Galería privada ·
-      <span id="clientNameTop">Selecciona una galería</span>
-    </div>
+  <div class="brand-lockup">
+    <img class="brand-logo" src="logo-jorge-arreola.png" alt="Jorge Arreola — Wedding Photographer">
+    <p class="subtitle">Galería privada <span aria-hidden="true">·</span> <span id="clientNameTop">Selecciona una galería</span></p>
   </div>
-
   <div class="header-right">
-
-    <a
-      id="adminLink"
-      href="#"
-      target="_blank"
-      rel="noopener"
-      class="admin-link">
-      Administración de fotografía
-    </a>
-
-    <div class="counter">
-      <strong id="selectedCount">0</strong>
-      seleccionadas
-    </div>
-
+    <a id="adminLink" href="#" target="_blank" rel="noopener" class="admin-link"><span aria-hidden="true">⚙</span> Panel de administración</a>
+    <div class="counter"><strong id="selectedCount">0</strong> seleccionadas</div>
   </div>
-
 </header>
 
 
+<section id="clientLogin" class="client-login hidden">
+  <div class="login-card"><img src="logo-jorge-arreola.png" alt="Jorge Arreola — Wedding Photographer">
+    <p class="eyebrow">GALERÍA PRIVADA</p><h1>Acceso a tu galería</h1>
+    <p id="loginClientName">Introduce la contraseña que te compartimos para consultar tus fotografías.</p>
+    <form id="clientLoginForm"><input id="clientPassword" type="password" autocomplete="current-password" placeholder="Tu contraseña" required><button class="primary" type="submit">Ingresar</button></form>
+    <p id="clientLoginMessage" class="connection-status" aria-live="polite"></p>
+  </div>
+</section>
+<section id="clientGalleryChoices" class="client-gallery-choices hidden"><div class="choices-heading"><p class="eyebrow">GALERÍA PRIVADA</p><h1 id="choicesClientName">Tu galería</h1><p>Elige qué fotografías deseas consultar.</p></div><div class="client-choice-grid"><article class="client-choice"><img id="originalThumb" alt="Miniatura galería original"><div><p class="eyebrow">GALERÍA ORIGINAL</p><h2 id="originalTitle">Galería original</h2><button type="button" data-open-type="original">Ingresar <span>→</span></button></div></article><article class="client-choice"><img id="editedThumb" alt="Miniatura galería editada"><div><p class="eyebrow">FOTOGRAFÍAS FINALES</p><h2>Galería editada</h2><button type="button" data-open-type="edited">Ingresar <span>→</span></button></div></article></div></section>
 <main>
 
   <!-- ======================================================
@@ -97,6 +84,7 @@
           <div class="instruction-number">
             01
           </div>
+          <div class="instruction-symbol"><img src="icono-galeria.png" alt=""></div>
 
           <div class="instruction-content">
 
@@ -120,6 +108,7 @@
           <div class="instruction-number">
             02
           </div>
+          <div class="instruction-symbol"><img src="icono-galeria.png" alt=""></div>
 
           <div class="instruction-content">
 
@@ -142,6 +131,7 @@
           <div class="instruction-number">
             03
           </div>
+          <div class="instruction-symbol"><img src="icono-lapiz.png" alt=""></div>
 
           <div class="instruction-content">
 
@@ -166,6 +156,7 @@
           <div class="instruction-number">
             04
           </div>
+          <div class="instruction-symbol"><img src="icono-enviar.png" alt=""></div>
 
           <div class="instruction-content">
 
@@ -219,6 +210,17 @@
         a tus fotografías.
       </p>
 
+      <div class="gallery-tools">
+        <label class="gallery-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="gallerySearch" type="search" placeholder="Buscar galería por nombre..." aria-label="Buscar galería por nombre">
+        </label>
+        <div class="gallery-filters" role="group" aria-label="Filtrar galerías">
+          <button type="button" class="active" data-gallery-filter="all">Todas</button>
+          <button type="button" data-gallery-filter="original">Originales</button>
+          <button type="button" data-gallery-filter="edited">Editadas</button>
+        </div>
+      </div>
 
       <div
         id="galleryList"
@@ -281,6 +283,10 @@
     </section>
 
 
+    <div class="gallery-type-switch" id="galleryTypeSwitch">
+      <button type="button" class="active" data-gallery-type="original">Galería original</button>
+      <button type="button" data-gallery-type="edited">Fotografías editadas</button>
+    </div>
     <div class="toolbar">
 
       <div>
